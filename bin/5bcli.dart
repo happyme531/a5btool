@@ -4,6 +4,7 @@ import 'package:a5btool/cpu_serial.dart';
 import 'package:a5btool/cpu_lottery.dart';
 import 'package:a5btool/input_voltage.dart';
 import 'package:a5btool/board_rev.dart';
+import 'package:a5btool/usbpd.dart';
 import 'package:a5btool/generated/version.dart';
 
 import 'package:args/args.dart';
@@ -13,7 +14,8 @@ import 'package:args/args.dart';
 ///  cpu_serial    获取cpu序列号
 ///  lottery       获取体质抽奖结果
 ///  input_voltage 读取输入电压
-/// board_rev     获取板子版本
+///  board_rev     获取板子版本
+///  usbpd         获取usbpd信息
 ///
 int main(List<String> arguments) {
   String selfName = Platform.executable.split(Platform.pathSeparator).last;
@@ -41,6 +43,12 @@ int main(List<String> arguments) {
   parser.addCommand('board_rev', boardRevParser);
   boardRevParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
 
+  //获取usbpd信息
+  var usbpdParser = ArgParser();
+  parser.addCommand('usbpd', usbpdParser);
+  usbpdParser.addFlag('raw', negatable: false, help: '获取原始的TCPM日志');
+  usbpdParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
+
   var results = parser.parse(arguments);
 
   var helpText = '''
@@ -50,8 +58,12 @@ int main(List<String> arguments) {
   lottery       获取体质抽奖结果
   input_voltage 读取输入电压
   board_rev     获取板子版本
+  usbpd         获取当前PD供电状态
     
-可用的参数:${parser.usage}
+可用的参数:
+${parser.usage}
+
+此软件是开源项目, 如果觉得对你有用, 可以点点star: https://github.com/happyme531/a5btool
 ''';
 
   if (results['help']) {
@@ -129,6 +141,39 @@ int main(List<String> arguments) {
         return 1;
       }
       print("板子版本: $result");
+      break;
+    case 'usbpd':
+      if (results.command!['help']) {
+        print(usbpdParser.usage);
+        return 0;
+      }
+      bool result = flushTcpmLog();
+      if (!result) {
+        print("此命令需要root权限");
+        return 1;
+      }
+      if (results.command!['raw']) {
+        print(getRawTcpmLog());
+      } else {
+        List<PDO>? pdos = parseTcpmLog();
+        if (pdos == null) {
+          print("获取usbpd信息失败");
+          return 1;
+        }
+        if (pdos.isEmpty) {
+          print("未检测到usbpd信息, 可能在用5V2A供电");
+          return 1;
+        }
+        print("你的充电器支持的电压电流:");
+        for (var pdo in pdos) {
+          if (pdo.voltage1 == 0)
+            print(
+                "${pdo.index + 1}: ${pdo.voltage0 / 1000.0}V, ${pdo.current / 1000.0}A");
+          else
+            print(
+                "${pdo.index + 1}: ${pdo.voltage0 / 1000.0}-${pdo.voltage1 / 1000.0}V, ${pdo.current / 1000.0}A");
+        }
+      }
       break;
   }
   return 0;
