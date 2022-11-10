@@ -60,3 +60,48 @@ CpuLotteryResult getCpuLotteryResult(int freqMHz) {
   });
   return freq2LevelMap[minKey];
 }
+
+//
+const Map pvtm2LevelMap = {
+  0: CpuLotteryResult.levelWorst,
+  1616: CpuLotteryResult.level3,
+  1641: CpuLotteryResult.level2,
+  1676: CpuLotteryResult.levelWorst,
+  1711: CpuLotteryResult.level3,
+  1744: CpuLotteryResult.level2,
+  1777: CpuLotteryResult.level1,
+  9999: CpuLotteryResult.level1
+};
+
+///获取CPU大核PVTM值
+///目前只能通过读取内核日志来获取...
+List? getPvtmBigClusters() {
+  var dmesgProc = Process.runSync('dmesg', []);
+  if (dmesgProc.exitCode != 0) {
+    throw Exception('无法读取内核日志. 权限不足?');
+  }
+  //获取cpu4和cpu6(两组大核)的pvtm值
+  RegExp cpuPvtmRegExp = RegExp(r'cpu[4-6]: pvtm=([0-9]+)');
+  String kernelMsg = dmesgProc.stdout.toString();
+  var lines = kernelMsg.split('\n');
+  var pvtmList = <int>[];
+  for (var line in lines) {
+    var match = cpuPvtmRegExp.firstMatch(line);
+    if (match != null) {
+      var pvtm = int.parse(match.group(1)!);
+      pvtmList.add(pvtm);
+    }
+  }
+  return pvtmList;
+}
+
+///通过PVTM值判断体质
+CpuLotteryResult getPvtmCpuLotteryResult(int pvtmVal) {
+  CpuLotteryResult result = CpuLotteryResult.levelWorst;
+  pvtm2LevelMap.forEach((key, v) {
+    if (pvtmVal >= key) {
+      result = v;
+    }
+  });
+  return result;
+}

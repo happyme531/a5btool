@@ -31,6 +31,8 @@ int main(List<String> arguments) {
   //获取体质抽奖结果
   var lotteryParser = ArgParser();
   parser.addCommand('lottery', lotteryParser);
+  lotteryParser.addFlag('list', abbr: 'l', negatable: false, help: '列出所有结果');
+  lotteryParser.addFlag('legacy', negatable: false, help: '使用旧版方式获取体质抽奖结果');
   lotteryParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
 
   //读取输入电压
@@ -100,22 +102,68 @@ ${parser.usage}
         print(lotteryParser.usage);
         return 0;
       }
-      var frequencies = getFreqBigClustersMHz();
-      if (frequencies == null) {
-        print("获取cpu频率失败");
-        return 1;
-      }
       const Map<CpuLotteryResult, String> lotteryMap = {
         CpuLotteryResult.level1: "一等奖",
         CpuLotteryResult.level2: "二等奖",
         CpuLotteryResult.level3: "三等奖",
         CpuLotteryResult.levelWorst: "参与奖",
       };
-      var result0 = getCpuLotteryResult(frequencies[0]);
-      var result1 = getCpuLotteryResult(frequencies[1]);
 
-      print("第一组大核频率: ${frequencies[0]}MHz, 抽奖结果: ${lotteryMap[result0]}");
-      print("第二组大核频率: ${frequencies[1]}MHz, 抽奖结果: ${lotteryMap[result1]}");
+      if (results.command!['list']) {
+        print("所有体质抽奖结果:");
+        if (results.command!['legacy']) {
+          freq2LevelMap.forEach((key, value) {
+            print("频率近似值: $key, 结果: ${lotteryMap[value]}");
+          });
+        } else {
+          var lastValue = -1;
+          var lastResult = CpuLotteryResult.levelWorst;
+          pvtm2LevelMap.forEach((key, value) {
+            if (lastValue != -1) {
+              print(
+                  "PVTM值: $lastValue - ${key - 1}, 结果: ${lotteryMap[lastResult]}");
+            }
+            lastValue = key;
+            lastResult = value;
+          });
+        }
+        return 0;
+      }
+
+      if (results.command!['legacy']) {
+        var frequencies = getFreqBigClustersMHz();
+        if (frequencies == null) {
+          print("获取cpu频率失败");
+          return 1;
+        }
+
+        var result0 = getCpuLotteryResult(frequencies[0]);
+        var result1 = getCpuLotteryResult(frequencies[1]);
+
+        print("第一组大核频率: ${frequencies[0]}MHz, 抽奖结果: ${lotteryMap[result0]}");
+        print("第二组大核频率: ${frequencies[1]}MHz, 抽奖结果: ${lotteryMap[result1]}");
+        print("抽奖结果受温度影响, 可以在不同温度下多次测试以获得更准确的结果");
+        print("使用 --list 参数以列出所有可能结果");
+      } else {
+        try {
+          var pvtmValues = getPvtmBigClusters();
+          if (pvtmValues == null) {
+            print("获取pvtm失败");
+            return 1;
+          }
+
+          var result0 = getPvtmCpuLotteryResult(pvtmValues[0]);
+          var result1 = getPvtmCpuLotteryResult(pvtmValues[1]);
+
+          print("第一组大核pvtm值: ${pvtmValues[0]}, 抽奖结果: ${lotteryMap[result0]}");
+          print("第二组大核pvtm值: ${pvtmValues[1]}, 抽奖结果: ${lotteryMap[result1]}");
+          print("抽奖结果受温度影响, 可以在不同温度下多次测试以获得更准确的结果");
+          print("使用 --list 参数以列出所有可能结果");
+        } catch (e) {
+          print("体质抽奖失败: $e");
+        }
+      }
+
       break;
     case 'input_voltage':
       if (results.command!['help']) {
