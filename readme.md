@@ -8,6 +8,7 @@
   input_voltage 读取输入电压
   board_rev     获取板子版本
   usbpd         获取当前PD供电状态
+  cpuidle       控制cpuidle
     
 可用的参数:
 -h, --help       获取帮助

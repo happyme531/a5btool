@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:core';
 
 import 'package:a5btool/cpu_serial.dart';
 import 'package:a5btool/cpu_lottery.dart';
 import 'package:a5btool/input_voltage.dart';
 import 'package:a5btool/board_rev.dart';
 import 'package:a5btool/usbpd.dart';
+import 'package:a5btool/cpuidle.dart';
 import 'package:a5btool/generated/version.dart';
 
 import 'package:args/args.dart';
@@ -51,6 +53,14 @@ int main(List<String> arguments) {
   usbpdParser.addFlag('raw', negatable: false, help: '获取原始的TCPM日志');
   usbpdParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
 
+  //控制cpuidle
+  var cpuidleParser = ArgParser();
+  parser.addCommand('cpuidle', cpuidleParser);
+  cpuidleParser.addOption('cpu', abbr: 'c', help: '指定cpu编号, 0开始, 默认为所有cpu');
+  cpuidleParser.addFlag('disable', negatable: false, help: '禁用cpuidle');
+  cpuidleParser.addFlag('enable', negatable: false, help: '启用cpuidle');
+  cpuidleParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
+
   var results = parser.parse(arguments);
 
   var helpText = '''
@@ -61,6 +71,7 @@ int main(List<String> arguments) {
   input_voltage 读取输入电压
   board_rev     获取板子版本
   usbpd         获取当前PD供电状态
+  cpuidle       控制cpuidle
     
 可用的参数:
 ${parser.usage}
@@ -221,6 +232,46 @@ ${parser.usage}
             print(
                 "${pdo.index + 1}: ${pdo.voltage0 / 1000.0}-${pdo.voltage1 / 1000.0}V, ${pdo.current / 1000.0}A");
         }
+      }
+      break;
+
+    case 'cpuidle':
+      if (results.command!['help']) {
+        print(cpuidleParser.usage);
+        return 0;
+      }
+      var cpuIdle = CpuIdle();
+      var operation = "none";
+      if (results.command!['enable']) {
+        operation = "enable";
+      } else if (results.command!['disable']) {
+        operation = "disable";
+      }
+      if (operation == "none") {
+        var states = cpuIdle.getAll();
+        if (states == null) {
+          print("获取CPU空闲状态失败");
+          return 1;
+        }
+        print("CPU空闲状态:");
+        for (var i = 0; i < states.length; i++) {
+          for (var j = 0; j < states[i].length; j++) {
+            print("CPU $i, 状态 $j: ${states[i][j] ? "可用" : "不可用"}");
+          }
+        }
+        return 1;
+      }
+      var affectedCpu = results.command!['cpu'];
+      var res = false;
+      if (affectedCpu == null) {
+        res = cpuIdle.setAll(operation == "enable");
+      } else {
+        res = cpuIdle.setAllStatesForCpu(
+            int.parse(affectedCpu), operation == "enable");
+      }
+      if (!res) {
+        print("设置CPU空闲状态失败, 可能需要root权限");
+        return 1;
       }
       break;
   }
