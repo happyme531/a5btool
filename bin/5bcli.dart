@@ -7,6 +7,7 @@ import 'package:a5btool/input_voltage.dart';
 import 'package:a5btool/board_rev.dart';
 import 'package:a5btool/usbpd.dart';
 import 'package:a5btool/cpuidle.dart';
+import 'package:a5btool/perfmon.dart';
 import 'package:a5btool/generated/version.dart';
 
 import 'package:args/args.dart';
@@ -18,6 +19,7 @@ import 'package:args/args.dart';
 ///  input_voltage 读取输入电压
 ///  board_rev     获取板子版本
 ///  usbpd         获取usbpd信息
+///  perfmon       性能监控
 ///
 int main(List<String> arguments) {
   String selfName = Platform.executable.split(Platform.pathSeparator).last;
@@ -61,6 +63,13 @@ int main(List<String> arguments) {
   cpuidleParser.addFlag('enable', negatable: false, help: '启用cpuidle');
   cpuidleParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
 
+  //性能监控
+  var perfmonParser = ArgParser();
+  parser.addCommand('perfmon', perfmonParser);
+  perfmonParser.addFlag('csv', negatable: false, help: '输出csv格式');
+  perfmonParser.addOption('interval', abbr: 'i', help: '指定采样间隔, 单位为秒, 默认为1');
+  perfmonParser.addFlag('help', abbr: 'h', negatable: false, help: '获取帮助');
+
   var results = parser.parse(arguments);
 
   var helpText = '''
@@ -72,7 +81,8 @@ int main(List<String> arguments) {
   board_rev     获取板子版本
   usbpd         获取当前PD供电状态
   cpuidle       控制cpuidle
-    
+  perfmon       性能监控
+
 可用的参数:
 ${parser.usage}
 
@@ -274,6 +284,34 @@ ${parser.usage}
         return 1;
       }
       break;
+
+    case 'perfmon':
+      if (results.command!['help']) {
+        print(perfmonParser.usage);
+        return 0;
+      }
+      var perfmon = Perfmon();
+      perfmon.init();
+      var interval = results.command!['interval'];
+      double intervalValue = 1;
+      if (interval != null) {
+        intervalValue = double.parse(interval);
+      }
+      if (results.command!['csv']) {
+        print(perfmon.getCsvHeader());
+        while (true) {
+          sleep(Duration(milliseconds: (intervalValue * 1000).toInt()));
+          print(perfmon.getCsvLine());
+        }
+      } else {
+        while (true) {
+          sleep(Duration(milliseconds: (intervalValue * 1000).toInt()));
+          var currentTime = DateTime.now().toIso8601String();
+          print("\x1b[2J\x1b[H"); //清除屏幕
+          print("5bcli 性能监控 - ${intervalValue}s - $currentTime");
+          print(perfmon.getUserFriendlyMessage());
+        }
+      }
   }
   return 0;
 }

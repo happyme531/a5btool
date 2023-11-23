@@ -9,7 +9,8 @@
   board_rev     获取板子版本
   usbpd         获取当前PD供电状态
   cpuidle       控制cpuidle
-    
+  perfmon       性能监控
+
 可用的参数:
 -h, --help       获取帮助
 -v, --version    显示工具版本
@@ -23,9 +24,8 @@
 
 首先安装Dart SDK, 然后执行:
 
-
 ```bash
 dart pub get
-dart pub run build_runner build
+dart run build_runner build
 dart compile exe bin/5bcli.dart -o 5bcli
 ```
