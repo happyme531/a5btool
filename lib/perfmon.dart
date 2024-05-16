@@ -41,6 +41,28 @@ String colorPercentage(int percentage) {
   return pen(percentage.toString()) + '%';
 }
 
+String? findHwmonPathByNamePart(String namePart) {
+  const hwmonBasePath = "/sys/class/hwmon/hwmon";
+  int index = 0;
+  while (true) {
+    var path = hwmonBasePath + index.toString();
+    if (!Directory(path).existsSync()) {
+      break;
+    }
+    var namePath = path + "/name";
+    if (!File(namePath).existsSync()) {
+      index++;
+      continue;
+    }
+    var name = File(namePath).readAsStringSync();
+    if (name.contains(namePart)) {
+      return path;
+    }
+    index++;
+  }
+  return null;
+}
+
 class CpuNormalizedDataSource extends PerfmonDataSource {
   static const path = '/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq';
   static const header_cpu_freq = 'cpu_freq_mhz';
@@ -81,6 +103,8 @@ class GpuDataSource extends PerfmonDataSource {
   static RegExp regex = RegExp(r'(\d+)@(\d+)Hz');
   static const header_gpu_load = 'gpu_load';
   static const header_gpu_freq = 'gpu_freq_mhz';
+  static const header_gpu_temp = 'gpu_temp_mc';
+  late String gpu_temp_path;
 
   List<int> _getData() {
     var str = File(path).readAsStringSync();
@@ -88,35 +112,42 @@ class GpuDataSource extends PerfmonDataSource {
     if (matches?.groupCount != 2) {
       throw Exception('Cannot parse GPU data source: $str');
     }
+    var gpu_temp = File(gpu_temp_path).readAsStringSync();
     return [
       int.parse(matches!.group(1)!),
-      int.parse(matches.group(2)!) ~/ 1000000
+      int.parse(matches.group(2)!) ~/ 1000000,
+      int.parse(gpu_temp)
     ];
   }
 
   @override
   void init() {
     if (!File(path).existsSync()) {
-      throw Exception('GPU data source not found');
+      throw Exception('GPU load data source not found');
     }
+    var hwmon_path = findHwmonPathByNamePart("gpu_thermal");
+    if (hwmon_path == null) {
+      throw Exception('GPU temp data source not found');
+    }
+    gpu_temp_path = hwmon_path + "/temp1_input";
     _getData();
   }
 
   @override
   String getCsvHeader() {
-    return '$header_gpu_load,$header_gpu_freq';
+    return '$header_gpu_load,$header_gpu_freq,$header_gpu_temp';
   }
 
   @override
   String getCsvLine() {
     var data = _getData();
-    return '${data[0]},${data[1]}';
+    return '${data[0]},${data[1]},${data[2]}';
   }
 
   @override
   String getUserFriendlyLine() {
     var data = _getData();
-    return 'GPU load: ${colorPercentage(data[0])}, freq: ${(data[1] / 1000).toStringAsFixed(1)}GHz';
+    return 'GPU load: ${colorPercentage(data[0])}, freq: ${(data[1] / 1000).toStringAsFixed(1)}GHz, temp: ${(data[2] / 1000).toStringAsFixed(1)}°C';
   }
 }
 
@@ -170,6 +201,8 @@ class NpuDataSource extends PerfmonDataSource {
   static RegExp regex =
       RegExp(r'Core0:\s+(\d+)%, Core1:\s+(\d+)%, Core2:\s+(\d+)%');
   static const header_npu_load = 'npu_load';
+  static const header_npu_temp = 'npu_temp_mc';
+  late String npu_temp_path;
 
   List<int> _getData() {
     var str = File(path).readAsStringSync();
@@ -177,10 +210,12 @@ class NpuDataSource extends PerfmonDataSource {
     if (matches?.groupCount != 3) {
       throw Exception('Cannot parse NPU data source: $str');
     }
+    var npu_temp = File(npu_temp_path).readAsStringSync();
     return [
       int.parse(matches!.group(1)!),
       int.parse(matches.group(2)!),
-      int.parse(matches.group(3)!)
+      int.parse(matches.group(3)!),
+      int.parse(npu_temp)
     ];
   }
 
@@ -189,24 +224,29 @@ class NpuDataSource extends PerfmonDataSource {
     if (!File(path).existsSync()) {
       throw Exception('NPU data source not found');
     }
+    var hwmon_path = findHwmonPathByNamePart("npu_thermal");
+    if (hwmon_path == null) {
+      throw Exception('NPU temp data source not found');
+    }
+    npu_temp_path = hwmon_path + "/temp1_input";
     _getData();
   }
 
   @override
   String getCsvHeader() {
-    return '${header_npu_load}_0,${header_npu_load}_1,${header_npu_load}_2';
+    return '${header_npu_load}_0,${header_npu_load}_1,${header_npu_load}_2,${header_npu_temp}';
   }
 
   @override
   String getCsvLine() {
     var data = _getData();
-    return '${data[0]},${data[1]},${data[2]}';
+    return '${data[0]},${data[1]},${data[2]},${data[3]}';
   }
 
   @override
   String getUserFriendlyLine() {
     var data = _getData();
-    return 'NPU load: ${colorPercentage(data[0])}, ${colorPercentage(data[1])}, ${colorPercentage(data[2])}';
+    return 'NPU load: ${colorPercentage(data[0])}, ${colorPercentage(data[1])}, ${colorPercentage(data[2])}, temp: ${(data[3] / 1000).toStringAsFixed(1)}°C';
   }
 }
 
